@@ -20,8 +20,9 @@ import {
 import { buildSlackAuthContext } from "#public/channels/slack/auth.js";
 import {
   buildFreeformModalView,
+  decodeFreeformActionId,
   deriveHitlResponse,
-  freeformRequestIdFromActionId,
+  HITL_FREEFORM_ACTION_PREFIX,
   HITL_FREEFORM_MODAL_ACTION_ID,
   HITL_FREEFORM_MODAL_BLOCK_ID,
   HITL_FREEFORM_MODAL_CALLBACK_ID,
@@ -37,6 +38,7 @@ import {
 import {
   approvalResponderStatePatch,
   authorizeInputResponse,
+  deliverAuthenticatedInputResponse,
 } from "#public/channels/slack/input-response.js";
 import type {
   SlackChannelConfig,
@@ -306,13 +308,13 @@ export async function handleInteractionPost(
 
   if (hitlActions.length > 0) {
     const user = hitlActions[0]!.action.user;
-    const route = hitlActions[0]!.derived.route;
+    const returnTo = hitlActions[0]!.derived.returnTo;
     ctx.waitUntil(
       dispatchBlockInputResponses({
         ctx,
         deps,
         interaction,
-        route,
+        returnTo,
         submission: {
           type: "block_actions",
           actions: hitlActions.map(({ action }) => action),
@@ -483,11 +485,11 @@ async function dispatchBlockInputResponses(input: {
   };
   readonly deps: InteractionHandlerDeps;
   readonly interaction: ParsedBlockActionsPayload;
-  readonly route?: { readonly channelId: string; readonly threadTs: string };
+  readonly returnTo?: { readonly channelId: string; readonly threadTs: string };
   readonly submission: Extract<SlackInputResponseSubmission, { type: "block_actions" }>;
 }): Promise<void> {
-  const channelId = input.route?.channelId ?? input.interaction.channelId;
-  const threadTs = input.route?.threadTs ?? input.interaction.threadTs;
+  const channelId = input.returnTo?.channelId ?? input.interaction.channelId;
+  const threadTs = input.returnTo?.threadTs ?? input.interaction.threadTs;
   const result = await authorizeInputResponse({
     channelId,
     deps: input.deps,
@@ -499,12 +501,13 @@ async function dispatchBlockInputResponses(input: {
   if (result === null) return;
 
   try {
-    await input.ctx
-      .from(slackContinuationToken(channelId, threadTs))
-      .respond(input.submission.inputResponses, {
-        auth: result.auth,
-        state: approvalResponderStatePatch(input.submission, result.auth),
-      });
+    await deliverAuthenticatedInputResponse({
+      auth: result.auth,
+      from: input.ctx.from,
+      inputResponses: input.submission.inputResponses,
+      returnTo: { channelId, threadTs },
+      state: approvalResponderStatePatch(input.submission, result.auth),
+    });
   } catch (error) {
     log.error("HITL interaction delivery failed", { error });
     return;
@@ -535,8 +538,15 @@ async function openFreeformModal(input: {
     return;
   }
 
-  const requestId =
-    freeformRequestIdFromActionId(input.freeformAction.actionId) ?? input.freeformAction.value;
+  const decoded = decodeFreeformActionId(input.freeformAction.actionId);
+  if (
+    decoded === null &&
+    input.freeformAction.actionId.startsWith(`${HITL_FREEFORM_ACTION_PREFIX}route:`)
+  ) {
+    log.warn("freeform button click carries an invalid return route");
+    return;
+  }
+  const requestId = decoded?.requestId ?? input.freeformAction.value;
   if (!requestId) {
     log.warn("freeform button click missing requestId");
     return;
@@ -548,14 +558,14 @@ async function openFreeformModal(input: {
     return;
   }
 
+  const channelId = decoded?.returnTo?.channelId ?? input.interaction.channelId;
+  const threadTs = decoded?.returnTo?.threadTs ?? input.interaction.threadTs;
   const metadata: HitlFreeformModalMetadata = {
-    continuationToken: slackContinuationToken(
-      input.interaction.channelId,
-      input.interaction.threadTs,
-    ),
-    channelId: input.interaction.channelId,
+    continuationToken: slackContinuationToken(channelId, threadTs),
+    channelId,
     installationTeamId: input.interaction.installationTeamId,
-    threadTs: input.interaction.threadTs,
+    messageChannelId: input.interaction.channelId,
+    threadTs,
     messageTs,
     requestId,
   };
@@ -603,7 +613,8 @@ async function handleViewSubmission(
     !metadata.requestId ||
     !metadata.messageTs ||
     !metadata.channelId ||
-    !metadata.threadTs
+    !metadata.threadTs ||
+    metadata.continuationToken !== slackContinuationToken(metadata.channelId, metadata.threadTs)
   ) {
     return ack;
   }
@@ -668,11 +679,12 @@ async function dispatchViewInputResponse(input: {
   if (result === null) return;
 
   try {
-    await input.ctx
-      .from(input.metadata.continuationToken)
-      .respond(input.submission.inputResponses, {
-        auth: result.auth,
-      });
+    await deliverAuthenticatedInputResponse({
+      auth: result.auth,
+      from: input.ctx.from,
+      inputResponses: input.submission.inputResponses,
+      returnTo: { channelId: input.metadata.channelId, threadTs: input.metadata.threadTs },
+    });
   } catch (error) {
     log.error("freeform answer delivery failed", { error });
     return;
@@ -680,7 +692,7 @@ async function dispatchViewInputResponse(input: {
 
   try {
     await updateAnsweredFreeformCard({
-      channelId: input.metadata.channelId,
+      channelId: input.metadata.messageChannelId ?? input.metadata.channelId,
       messageTs: input.metadata.messageTs,
       answerLabel: input.text,
       userId: input.submission.user.id,

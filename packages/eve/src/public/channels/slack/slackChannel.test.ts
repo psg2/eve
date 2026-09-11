@@ -3109,7 +3109,7 @@ describe("slackChannel() HITL interaction pipeline", () => {
     });
   });
 
-  it("opens freeform modals with installation-scoped credentials and metadata", async () => {
+  it("opens routed freeform modals with installation-scoped credentials and metadata", async () => {
     const botToken = vi.fn((_context: { readonly teamId?: string }) => "xoxb-test");
     const channel = slackChannel({ credentials: { botToken } });
 
@@ -3128,7 +3128,7 @@ describe("slackChannel() HITL interaction pipeline", () => {
         },
         actions: [
           {
-            action_id: `${HITL_FREEFORM_ACTION_PREFIX}call_abc123`,
+            action_id: `${HITL_FREEFORM_ACTION_PREFIX}route:C_ORIGINAL:1700000000.000001:question:call_abc123`,
             text: { type: "plain_text", text: "Type your answer" },
             value: "call_abc123",
           },
@@ -3145,7 +3145,40 @@ describe("slackChannel() HITL interaction pipeline", () => {
       view: { private_metadata: string };
     };
     expect(JSON.parse(body.view.private_metadata)).toMatchObject({
+      channelId: "C_ORIGINAL",
       installationTeamId: "T_INSTALLATION",
+      messageChannelId: "C01",
+      requestId: "call_abc123",
+      threadTs: "1700000000.000001",
+    });
+  });
+
+  it("routes a question answer back to its original thread", async () => {
+    const channel = slackChannel({ credentials: { botToken: "xoxb-test" } });
+    const { send } = await firePost(
+      channel,
+      buildSignedInteractionRequest({
+        type: "block_actions",
+        team: { id: "T01" },
+        user: { id: "U_REVIEWER", username: "ada", team_id: "T01" },
+        channel: { id: "D_REVIEW" },
+        message: { ts: "1700000000.000010", blocks: [] },
+        actions: [
+          {
+            action_id:
+              "eve_input:route:C_ORIGINAL:1700000000.000001:question:question_abc:button:0",
+            text: { type: "plain_text", text: "Approve" },
+            value: "approve",
+          },
+        ],
+      }),
+    );
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]?.[0]).toBe("C_ORIGINAL:1700000000.000001");
+    expect(send.mock.calls[0]?.[1]).toMatchObject({
+      auth: { principalId: "slack:T01:U_REVIEWER" },
+      inputResponses: [{ optionId: "approve", requestId: "question_abc" }],
     });
   });
 
