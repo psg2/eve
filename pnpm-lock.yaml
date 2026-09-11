@@ -954,12 +954,18 @@ importers:
       '@eve-e2e/config':
         specifier: workspace:*
         version: link:../e2e-config
+      '@vercel/connect':
+        specifier: 'catalog:'
+        version: 1.0.0(@ai-sdk/mcp@2.0.45(zod@4.5.4))(@auth/core@0.41.2)(@chat-adapter/slack@4.34.0(ai@7.0.93(zod@4.5.4))(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4))(ai@7.0.93(zod@4.5.4))(eve@packages+eve)
       '@workflow/world-postgres':
         specifier: 'catalog:'
         version: 5.0.0-beta.41(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(@upstash/redis@1.38.4)(sql.js@1.14.1)(supports-color@10.2.2)(typescript@7.0.2)
       eve:
         specifier: workspace:*
         version: link:../../../packages/eve
+      just-bash:
+        specifier: 3.1.0
+        version: 3.1.0(supports-color@10.2.2)
       zod:
         specifier: 'catalog:'
         version: 4.5.4
@@ -1416,6 +1422,9 @@ importers:
       '@vercel/blob':
         specifier: 2.8.0
         version: 2.8.0
+      '@vercel/connect':
+        specifier: 'catalog:'
+        version: 1.0.0(@ai-sdk/mcp@2.0.45(zod@4.5.4))(@auth/core@0.41.2)(@chat-adapter/slack@4.34.0(ai@7.0.93(zod@4.5.4))(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4))(ai@7.0.93(zod@4.5.4))(eve@packages+eve)
       '@vercel/detect-agent':
         specifier: 1.2.3
         version: 1.2.3
