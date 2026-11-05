@@ -107,6 +107,8 @@
   "SlackUploadFilesOptions",
   "SlackUploadFilesResult",
   "SlackUserInfo",
+  "SlackViewSubmission",
+  "SlackViewSubmissionContext",
   "SlackWebhookVerifier",
   "SlackWorkspaceHandle",
   "Table",

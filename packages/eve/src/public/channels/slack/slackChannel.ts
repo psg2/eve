@@ -597,6 +597,24 @@ export interface SlackOpenedCodeChannel extends SlackSessionOperations {
 /** Interaction-scoped context handed to `slackChannel({ onInteraction })`. */
 export interface SlackInteractionContext extends SlackContext, SlackSessionOperations {}
 
+/** An app-owned modal submission, delivered after webhook verification. */
+export interface SlackViewSubmission {
+  readonly callbackId: string;
+  readonly privateMetadata?: string;
+  /** Slack's view ID, usable as an application submission reference. */
+  readonly viewId?: string;
+  /** Unflattened view state, preserving dates, selects, and multi-selects. */
+  readonly state: Record<string, unknown>;
+  readonly user: SlackInteractionUser;
+  /** Workspace of the submitting actor, which can differ from the installation. */
+  readonly teamId?: string;
+}
+
+/** Workspace-scoped context for app-owned modal submissions. */
+export interface SlackViewSubmissionContext {
+  readonly slack: SlackWorkspaceHandle;
+}
+
 /** Workspace-scoped context handed to `slackChannel({ onShortcut })`. */
 export interface SlackShortcutContext {
   /** Slack workspace identity and raw Web API escape hatch. */
@@ -1004,6 +1022,17 @@ export interface SlackChannelConfig {
    * `waitUntil()`. Errors are caught and logged.
    */
   onShortcut?(shortcut: SlackShortcut, ctx: SlackShortcutContext): void | Promise<void>;
+  /**
+   * Handles app-owned `view_submission` callbacks after webhook verification.
+   * eve-owned HITL callbacks never reach this hook. eve returns an empty 200
+   * immediately and runs the handler through `waitUntil`; errors are logged.
+   * This notification hook cannot return inline modal validation errors.
+   * Revalidate application permissions before applying submitted changes.
+   */
+  onViewSubmission?(
+    submission: SlackViewSubmission,
+    ctx: SlackViewSubmissionContext,
+  ): void | Promise<void>;
 
   /**
    * Handles Slack slash commands configured with this channel's webhook route.

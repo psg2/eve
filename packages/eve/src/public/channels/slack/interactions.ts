@@ -51,6 +51,8 @@ import type {
   SlackInteractionUser,
   SlackShortcut,
   SlackShortcutContext,
+  SlackViewSubmission,
+  SlackViewSubmissionContext,
 } from "#public/channels/slack/slackChannel.js";
 import type { ChannelFrom, ChannelResolveSession } from "#channel/channel-operations.js";
 import {
@@ -671,7 +673,33 @@ async function handleViewSubmission(
 ): Promise<Response> {
   // Slack view submissions require an empty 200 body to close the modal.
   const ack = new Response(null, { status: 200 });
-  if (payload.callbackId !== HITL_FREEFORM_MODAL_CALLBACK_ID) return ack;
+  if (payload.callbackId !== HITL_FREEFORM_MODAL_CALLBACK_ID) {
+    const handler = deps.config.onViewSubmission;
+    if (handler !== undefined && payload.callbackId) {
+      const submission: SlackViewSubmission = {
+        callbackId: payload.callbackId,
+        privateMetadata: payload.privateMetadata,
+        viewId: typeof payload.view?.id === "string" ? payload.view.id : undefined,
+        state: isObjectRecord(payload.view?.state) ? payload.view.state : {},
+        user: { id: payload.userId, username: payload.user?.username, name: payload.user?.name },
+        teamId: payload.user?.teamId ?? payload.teamId,
+      };
+      const context: SlackViewSubmissionContext = {
+        slack: buildSlackWorkspaceHandle({
+          api: deps.api,
+          botToken: deps.config.credentials?.botToken,
+          installationTeamId: readInstallationTeamId(payload.raw),
+          teamId: submission.teamId,
+        }),
+      };
+      dispatchInteractionHook(
+        () => handler(submission, context),
+        ctx,
+        "view submission handler failed",
+      );
+    }
+    return ack;
+  }
 
   let metadata: HitlFreeformModalMetadata;
   try {

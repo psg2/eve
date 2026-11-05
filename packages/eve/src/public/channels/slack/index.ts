@@ -39,6 +39,8 @@ export {
   type SlackShortcut,
   type SlackShortcutContext,
   type SlackShortcutMessage,
+  type SlackViewSubmission,
+  type SlackViewSubmissionContext,
   type SlackMentionResult,
   type SlackReceiveTarget,
   type SlackSessionTarget,
